@@ -11,7 +11,7 @@ Detect and report AI-generated noise patterns in source files without modifying 
 
 By default, scan the files changed in the current git diff. If no git diff is available, scan the current open file. The user can also specify a path, glob, or "all" to scan the entire project.
 
-**Supported file types:** `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs`, `.cjs`
+**Supported file types:** `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs`, `.cjs`, `.py`, `.go`, `.php`
 
 ## Pattern Categories
 
@@ -19,11 +19,11 @@ By default, scan the files changed in the current git diff. If no git diff is av
 Comments that mirror the immediately following line of code:
 - `// return result` above `return result`
 - `// increment counter` above `counter++`
-- `// call the API` above `await fetchUser(id)`
-- `// set the value` above `value = x`
+- `# call the API` above `await fetch_user(id)` (Python)
+- `// call the database` above `return db.Find(id)` (Go)
 
 ### Category B — Template / boilerplate phrases
-Comments containing these patterns (case-insensitive):
+Comments containing these patterns (case-insensitive), in any supported language's comment syntax:
 - "This function is responsible for…"
 - "This method is responsible for…"
 - "In this code we will…"
@@ -40,8 +40,8 @@ Comments containing these patterns (case-insensitive):
 - "I don't have access to…"
 
 ### Category D — Debug-labeled comments
-- `// debug`
-- `// temp` / `// temporary` / `// temporary test`
+- `// debug` / `# debug`
+- `// temp` / `# temp` / `// temporary`
 - `// TODO remove` (with no context)
 - `// remove before commit`
 - `// just for testing`
@@ -49,15 +49,22 @@ Comments containing these patterns (case-insensitive):
 
 ### Category E — Emojis in non-UI context
 - Any emoji in a comment
-- Any emoji in a `console.*` call string
+- Any emoji in a `console.*` / `print()` / `fmt.Println()` call string
 - Any emoji in a thrown `Error` message or logger call
 - Emojis **not** in JSX elements or user-facing strings are flagged
 
-### Category F — Inflated JSDoc
-JSDoc blocks that are likely AI-generated padding:
-- 6+ line JSDoc on a function with a 1–3 line body
+### Category F — Inflated JSDoc / docstrings
+Doc blocks that are likely AI-generated padding:
+- 6+ line JSDoc/docstring on a function with a 1–3 line body
 - Summary that repeats the function name verbatim
-- `@param` and `@returns` tags with no type or constraint info beyond the name
+- `@param` and `@returns` / `:param` / `:returns:` tags with no type or constraint info beyond the name
+
+### Category G — Prose slop in Markdown
+Patterns in `.md` files (README, docs, changelogs):
+- Filler openers: "It's worth noting that", "Note that", "As mentioned above"
+- Emphasis crutches: "very", "extremely", "incredibly" before adjectives
+- Formulaic closings: "In conclusion", "To summarize"
+- AI-tell phrases: "seamless", "robust", "powerful" as standalone adjectives
 
 ## Output Format
 
@@ -73,22 +80,24 @@ Report findings grouped by file, then by category. Use this format:
   [E] line 103  console.log("Auth done 🎉", user)
   [F] lines 1–9 Inflated JSDoc on getUserById (8-line JSDoc, 2-line body)
 
-── src/utils/format.ts ────────────────────────────────────
-  [B] line 5    // Helper function that formats the date
-  [E] line 14   // Setup complete ✅
+── README.md ──────────────────────────────────────────────
+  [G] line 5    "It's worth noting that this tool requires Claude Code."
+  [G] line 22   "seamless integration with your workflow"
 
 SUMMARY
-  Files scanned:   3
-  Files with slop: 2
-  Total findings:  8
+  Files scanned:   4
+  Files with slop: 3
+  Total findings:  9
     [A] Redundant comments:     2
     [B] Template phrases:       2
     [C] AI meta-phrases:        1
     [D] Debug labels:           1
     [E] Emojis (non-UI):        2
     [F] Inflated JSDoc:         1
+    [G] Prose slop (Markdown):  2
 
-Run /ai-clean-diff to clean the findings above (only changed lines).
+Run /ai-clean-diff to clean code findings (only changed lines).
+Run /ai-clean-prose to clean Markdown prose findings.
 Run /ai-clean-comments or /ai-remove-emojis to clean the full file.
 ```
 
@@ -97,11 +106,11 @@ Run /ai-clean-comments or /ai-remove-emojis to clean the full file.
 1. Determine scope:
    - Default: run `git diff --name-only HEAD` to get changed files. If empty, try `git diff origin/main...HEAD --name-only`.
    - If the user specified a file or path, use that.
-   - If the user said "all" or "everything", list all `.js/.ts/.jsx/.tsx` files in `src/`.
+   - If the user said "all" or "everything", list all supported files in `src/` and `.md` files in the project root and `docs/`.
 
-2. Filter to supported extensions. Skip binaries, lock files, and generated files (e.g., files in `dist/`, `node_modules/`, `*.min.js`).
+2. Filter to supported extensions. Skip binaries, lock files, and generated files.
 
-3. For each file, read the full content and scan line by line for patterns A–F.
+3. For each file, read the full content and scan line by line for patterns A–G.
 
 4. Collect all findings with their line numbers and the matched text.
 
@@ -109,12 +118,12 @@ Run /ai-clean-comments or /ai-remove-emojis to clean the full file.
 
 6. Do NOT edit any file. This skill is read-only.
 
-7. At the end, suggest the appropriate cleanup skill based on the scope.
+7. At the end, suggest the appropriate cleanup skill based on what was found.
 
 ## Edge Cases
 
-- **Test files** (`*.test.ts`, `*.spec.ts`, files in `__tests__/`): scan normally but flag fewer things — `// debug` comments may be intentional in tests.
+- **Test files** (`*.test.ts`, `*.spec.ts`, `_test.go`, files in `__tests__/`): scan normally but flag fewer things — `// debug` comments may be intentional in tests.
 - **Generated files** (`*.min.js`, files containing `// @generated` or `// Code generated`): skip entirely.
 - **Large files (>1000 lines):** scan fully but note in the output that the file is large.
-- **No slop found:** print a clean confirmation message, e.g., `No AI slop patterns detected in the scanned files.`
+- **No slop found:** print a clean confirmation message.
 - **No git repo or no changed files:** scan the current file and note that git diff was unavailable.

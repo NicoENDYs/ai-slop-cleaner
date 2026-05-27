@@ -1,0 +1,42 @@
+name: AI Slop Check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  slop-scan:
+    name: Scan for AI slop patterns
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get changed files
+        id: changed
+        run: |
+          echo "files=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E '\.(js|ts|jsx|tsx|mjs|cjs)$' | tr '\n' ' ')" >> $GITHUB_OUTPUT
+
+      - name: Run slop pattern scan
+        if: steps.changed.outputs.files != ''
+        run: |
+          python3 .github/scripts/slop_scan.py ${{ steps.changed.outputs.files }}
+
+      - name: Comment results on PR
+        if: github.event_name == 'pull_request' && failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('/tmp/slop-report.txt', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🧹 AI Slop Scan Results\n\n\`\`\`\n${report}\n\`\`\`\n\nRun \`/ai-clean-diff\` to fix flagged patterns.`
+            });

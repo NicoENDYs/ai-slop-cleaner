@@ -7,6 +7,34 @@
 
   "targetExtensions": [".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs"],
 
+  "languages": {
+    "javascript": {
+      "extensions": [".js", ".mjs", ".cjs"],
+      "commentSyntax": "//",
+      "blockCommentSyntax": ["/*", "*/"]
+    },
+    "typescript": {
+      "extensions": [".ts", ".tsx"],
+      "commentSyntax": "//",
+      "blockCommentSyntax": ["/*", "*/"]
+    },
+    "python": {
+      "extensions": [".py"],
+      "commentSyntax": "#",
+      "blockCommentSyntax": ["\"\"\"", "\"\"\""]
+    },
+    "go": {
+      "extensions": [".go"],
+      "commentSyntax": "//",
+      "blockCommentSyntax": ["/*", "*/"]
+    },
+    "php": {
+      "extensions": [".php"],
+      "commentSyntax": "//",
+      "blockCommentSyntax": ["/*", "*/"]
+    }
+  },
+
   "rules": {
     "removeRedundantComments": true,
     "removeTemplateComments": true,
@@ -15,7 +43,8 @@
     "removeInflatedJSDoc": true,
     "removeEmojisInComments": true,
     "removeEmojisInLogs": true,
-    "removeEmojisInErrorMessages": true
+    "removeEmojisInErrorMessages": true,
+    "cleanProse": false
   },
 
   "preserve": {
@@ -25,11 +54,18 @@
     "commentedOutCode": true
   },
 
+  "metrics": {
+    "enabled": true,
+    "outputFile": ".ai-slop-metrics.json",
+    "trackPerCommit": true
+  },
+
   "perDirectory": {
     "docs/": {
       "removeRedundantComments": false,
       "removeTemplateComments": false,
-      "removeEmojisInComments": false
+      "removeEmojisInComments": false,
+      "cleanProse": true
     },
     "src/": {
       "removeRedundantComments": true,
