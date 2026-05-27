@@ -71,22 +71,45 @@ Keep emojis in translation files (`*.json`, `*.po`, `*.yml` inside `locales/` or
 ### README and documentation files (`.md`, `.mdx`)
 Out of scope — do not modify Markdown files with this skill.
 
+## Dry-Run Mode
+
+If the user's request includes `--dry-run`, `dry run`, or "muéstrame qué cambiaría" / "show me what would change":
+
+1. Run the full procedure below, but **do not write any file changes**.
+2. Instead, output a unified diff showing which lines would be modified:
+   ```diff
+   --- src/auth/login.ts (before)
+   +++ src/auth/login.ts (after)
+   @@ -5,3 +5,3 @@
+   -// 🚀 Auth module setup
+   +// Auth module setup
+   -  console.log("User authenticated 🎉", user.id)
+   +  console.log("User authenticated", user.id)
+   ```
+3. Print a summary (X emojis would be removed from Y lines) and ask the user to confirm.
+4. If the user confirms, run again in normal mode to apply changes.
+
+## Configuration
+
+If a `.ai-slop-cleaner.json` file exists in the project root, read it and apply `rules.removeEmojisInComments`, `rules.removeEmojisInLogs`, and `perDirectory` overrides before processing each file.
+
 ## Procedure
 
 1. Read the full file content.
-2. Scan line by line for characters in the emoji Unicode ranges listed above.
-3. For each line containing an emoji:
+2. Check if a `.ai-slop-cleaner.json` config exists and load relevant rules for this file's directory.
+3. Scan line by line for characters in the emoji Unicode ranges listed above.
+4. For each line containing an emoji:
    a. **Is it inside a JSX element or JSX expression?** → Skip (keep emoji).
    b. **Is it inside a comment (`//`, `/* */`, `/** */`)?** → Remove the emoji(s), keep the rest of the comment.
    c. **Is it inside a `console.*` call string?** → Remove the emoji(s), keep the string.
-   d. **Is it inside a string that renders to the UI** (JSX prop, template literal used in render)?** → Keep.
+   d. **Is it inside a string that renders to the UI** (JSX prop, template literal used in render)? → Keep.
    e. **Is it inside a thrown `Error` message, a logger call, or a non-UI string literal?** → Remove emoji(s), keep the string.
-4. After removing an emoji, clean up any extra whitespace it leaves:
+5. After removing an emoji, clean up any extra whitespace it leaves:
    - `"Done  🎉 here"` → `"Done here"` (collapse extra spaces)
    - `"Done 🎉"` → `"Done"` (trailing space removed)
    - `"🎉 Done"` → `"Done"` (leading space removed)
-5. Preserve indentation, line breaks, and all surrounding code structure.
-6. Report a summary: how many emojis removed, from how many lines.
+6. Preserve indentation, line breaks, and all surrounding code structure.
+7. Report a summary: how many emojis removed, from how many lines.
 
 ## Edge Cases
 

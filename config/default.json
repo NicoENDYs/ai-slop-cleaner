@@ -1,0 +1,54 @@
+{
+  "_comment": "Copy this file to your project root as .ai-slop-cleaner.json and adjust as needed.",
+
+  "scope": "diff",
+
+  "dryRun": false,
+
+  "targetExtensions": [".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs"],
+
+  "rules": {
+    "removeRedundantComments": true,
+    "removeTemplateComments": true,
+    "removeAIMetaPhrases": true,
+    "removeDebugLabels": true,
+    "removeInflatedJSDoc": true,
+    "removeEmojisInComments": true,
+    "removeEmojisInLogs": true,
+    "removeEmojisInErrorMessages": true
+  },
+
+  "preserve": {
+    "todoFixme": true,
+    "linterDirectives": true,
+    "licenseHeaders": true,
+    "commentedOutCode": true
+  },
+
+  "perDirectory": {
+    "docs/": {
+      "removeRedundantComments": false,
+      "removeTemplateComments": false,
+      "removeEmojisInComments": false
+    },
+    "src/": {
+      "removeRedundantComments": true,
+      "removeEmojisInComments": true
+    },
+    "tests/": {
+      "removeDebugLabels": false
+    },
+    "__tests__/": {
+      "removeDebugLabels": false
+    }
+  },
+
+  "ignoreFiles": [
+    "dist/**",
+    "build/**",
+    "node_modules/**",
+    "*.min.js",
+    "*.generated.ts",
+    "*.d.ts"
+  ]
+}

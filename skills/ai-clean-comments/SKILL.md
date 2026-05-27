@@ -107,20 +107,44 @@ Keep `@param`, `@returns`, `@throws`, `@deprecated`, `@since` on:
 - Public methods in exported classes
 - Functions in `.d.ts` files
 
+## Dry-Run Mode
+
+If the user's request includes `--dry-run`, `dry run`, or "muéstrame qué cambiaría" / "show me what would change":
+
+1. Run the full procedure below, but **do not write any file changes**.
+2. Instead, output a unified diff showing what would be removed:
+   ```diff
+   --- src/utils/format.ts (before)
+   +++ src/utils/format.ts (after)
+   @@ -10,7 +10,4 @@
+   -// This function is responsible for formatting the user's name
+    function formatUserName(user: User): string {
+   -  // concatenate first and last name
+      return `${user.firstName} ${user.lastName}`;
+    }
+   ```
+3. Print a summary (X comments would be removed) and ask the user to confirm before proceeding.
+4. If the user confirms, run again in normal mode to apply changes.
+
+## Configuration
+
+If a `.ai-slop-cleaner.json` file exists in the project root, read it and apply `rules` and `perDirectory` overrides before processing each file. Directory-level rules take precedence over top-level rules for files within that directory.
+
 ## Procedure
 
 1. Read the full file content.
-2. Identify all comment blocks (single-line `//`, multi-line `/* */`, JSDoc `/** */`).
-3. For each comment, check in order:
+2. Check if a `.ai-slop-cleaner.json` config exists and load relevant rules for this file's directory.
+3. Identify all comment blocks (single-line `//`, multi-line `/* */`, JSDoc `/** */`).
+4. For each comment, check in order:
    a. Is it a tool directive? → **Keep unconditionally.**
    b. Does it start with `TODO:`, `FIXME:`, `HACK:`, `NOTE:`, `XXX:`, `BUG:`? → **Keep unconditionally.**
    c. Does it explain a non-obvious business rule, edge case, or design decision? → **Keep.**
    d. Does it match any "What to Remove" pattern? → **Remove.**
    e. Is it a JSDoc on an exported function/class? → **Keep only if it adds info beyond the name.**
    f. If uncertain, **keep the comment** — the goal is to remove obvious noise, not to second-guess every comment.
-4. Remove only the identified comments. Do not reformat or modify surrounding code.
-5. If removing a comment leaves a blank line that creates awkward double-blank-lines, collapse to a single blank line.
-6. Report a summary: how many comments were removed and of which type.
+5. Remove only the identified comments. Do not reformat or modify surrounding code.
+6. If removing a comment leaves a blank line that creates awkward double-blank-lines, collapse to a single blank line.
+7. Report a summary: how many comments were removed and of which type.
 
 ## Edge Cases
 

@@ -29,6 +29,23 @@ Apply the same rules as the `ai-clean-comments` and `ai-remove-emojis` skills to
 - Remove emojis from comments and `console.*` calls.
 - Keep emojis inside JSX elements and user-facing UI strings.
 
+## Dry-Run Mode
+
+If the user's request includes `--dry-run`, `dry run`, or "muéstrame qué cambiaría" / "show me what would change":
+
+1. Run Steps 1–4 below, but **do not write any file changes** in Step 5.
+2. Instead, output a unified diff of what would be removed across all changed files.
+3. Print a summary (X comments removed, Y emojis stripped across Z files) and ask the user to confirm.
+4. If the user confirms, run again in normal mode to apply changes.
+
+## Configuration
+
+If a `.ai-slop-cleaner.json` file exists in the project root, read it before processing. Respect:
+- `scope`: if set to `"diff"` (default), limit to changed files; if `"file"`, process only the current file.
+- `dryRun`: if `true`, behave as if `--dry-run` was passed.
+- `rules` and `perDirectory` overrides apply per file.
+- `ignoreFiles`: skip any file matching these glob patterns.
+
 ## Procedure
 
 ### Step 1 — Identify changed files
