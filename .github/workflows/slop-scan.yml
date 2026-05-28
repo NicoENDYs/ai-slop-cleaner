@@ -1,0 +1,43 @@
+name: Code Noise Scan
+
+on:
+  pull_request:
+    paths:
+      - "**.js"
+      - "**.ts"
+      - "**.jsx"
+      - "**.tsx"
+      - "**.mjs"
+      - "**.cjs"
+
+jobs:
+  scan:
+    name: Scan for code noise
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get changed JS/TS files
+        id: changed
+        run: |
+          FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD \
+            | grep -E '\.(js|ts|jsx|tsx|mjs|cjs)$' \
+            | grep -v 'node_modules' \
+            | grep -v '\.min\.' \
+            | tr '\n' ' ')
+          echo "files=$FILES" >> $GITHUB_OUTPUT
+
+      - name: Run scanner
+        if: steps.changed.outputs.files != ''
+        run: |
+          python3 .github/scripts/slop_scan.py ${{ steps.changed.outputs.files }}
+        # Informational only — does not block merge.
+        # Set continue-on-error: false to make it a hard gate.
+        continue-on-error: true
+
+      - name: No JS/TS files changed
+        if: steps.changed.outputs.files == ''
+        run: echo "No JS/TS files changed in this PR."

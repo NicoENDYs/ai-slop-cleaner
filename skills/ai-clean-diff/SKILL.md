@@ -1,117 +1,173 @@
 ---
 name: ai-clean-diff
-description: "Use this skill when the user wants to clean only their recent changes, clean the current diff, or remove AI slop from modified files without touching legacy code. Triggers include: 'clean diff', 'limpiar diff', 'clean my changes', 'clean only changed files', 'ai-clean-diff', 'clean recent changes'. Do NOT use when the user wants to clean an entire file or entire codebase — use ai-clean-comments or ai-remove-emojis for that instead."
+description: "Use this skill to clean AI-generated noise from code: redundant comments, template phrases, AI meta-text, debug labels, and emojis in non-UI contexts. By default operates only on files changed in the current git diff (safe for repos with legacy code). Triggers include: 'clean diff', 'clean comments', 'remove emojis', 'limpiar diff', 'limpiar comentarios', 'quitar emojis', 'ai-clean-diff', 'ai-clean-comments', 'ai-remove-emojis', 'deslop', 'clean up AI slop', 'clean recent changes'. Flags: --scope=diff (default), --scope=file, --scope=all, --only=comments, --only=emojis, --dry-run."
 ---
 
 # AI Clean Diff
 
-Apply comment and emoji cleanup rules **only to lines added or modified in the current git diff**. Protects legacy, stable code from unintended changes while cleaning up recent AI-assisted work.
+Remove AI-generated code noise — redundant comments, template phrases, emojis in non-UI contexts — without touching business logic or useful documentation.
 
-## Scope
+**Default scope:** files changed in the current git diff (protects legacy code).
 
-- Only files listed by `git diff --name-only HEAD` (unstaged + staged changes vs last commit).
-- If the branch has commits ahead of the base branch, also include `git diff origin/main...HEAD --name-only` (or `origin/master` if `main` doesn't exist).
-- Only target lines prefixed with `+` in the diff output (added/modified lines). Lines with `-` (removed) and context lines (no prefix) are ignored.
-- Only process files with these extensions: `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs`, `.cjs`.
+## Flags
 
-## Cleanup Rules Applied
+| Flag | Behavior |
+|------|----------|
+| `--scope=diff` | Default. Only files in `git diff HEAD` |
+| `--scope=file` | Current open/specified file only |
+| `--scope=all` | All JS/TS files in `src/` (warn before proceeding) |
+| `--only=comments` | Skip emoji removal, clean comments only |
+| `--only=emojis` | Skip comment cleanup, remove emojis only |
+| `--dry-run` | Show unified diff without editing any file |
 
-Apply the same rules as the `ai-clean-comments` and `ai-remove-emojis` skills to the scoped lines:
-
-**From ai-clean-comments:**
-- Remove redundant comments that repeat the next line.
-- Remove template/boilerplate phrases ("This function is responsible for…", "As an AI…", etc.).
-- Remove debug-labeled comments (`// debug`, `// temp`, `// TODO remove` with no context).
-- Remove inflated JSDoc on trivial functions.
-- Keep: `TODO:`, `FIXME:`, `HACK:`, tool directives, business logic explanations.
-
-**From ai-remove-emojis:**
-- Remove emojis from comments and `console.*` calls.
-- Keep emojis inside JSX elements and user-facing UI strings.
-
-## Dry-Run Mode
-
-If the user's request includes `--dry-run`, `dry run`, or "muéstrame qué cambiaría" / "show me what would change":
-
-1. Run Steps 1–4 below, but **do not write any file changes** in Step 5.
-2. Instead, output a unified diff of what would be removed across all changed files.
-3. Print a summary (X comments removed, Y emojis stripped across Z files) and ask the user to confirm.
-4. If the user confirms, run again in normal mode to apply changes.
+If the user's message includes `--dry-run`, `dry run`, or *"muéstrame qué cambiaría"* / *"show me what would change"*, apply the dry-run behavior.
 
 ## Configuration
 
-If a `.ai-slop-cleaner.json` file exists in the project root, read it before processing. Respect:
-- `scope`: if set to `"diff"` (default), limit to changed files; if `"file"`, process only the current file.
-- `dryRun`: if `true`, behave as if `--dry-run` was passed.
-- `rules` and `perDirectory` overrides apply per file.
-- `ignoreFiles`: skip any file matching these glob patterns.
+If `.ai-slop-cleaner.json` exists in the project root, load it before processing. Apply `rules`, `perDirectory` overrides (directory-level takes precedence), and `ignoreFiles` globs. If `dryRun: true` is set in config, behave as if `--dry-run` was passed.
+
+---
+
+## What to Remove
+
+### Category A — Redundant comments (mirror the next line)
+Comments that describe exactly what the immediately following code line does:
+```typescript
+// return the result          ← remove
+return result;
+
+// increment counter          ← remove
+counter++;
+
+// call the database          ← remove (if next line is a db call)
+const user = await db.users.findUnique({ where: { id } });
+```
+
+Detection heuristic: comment contains a verb from the mirror-verb list (return, fetch, set, update, call, log, render, etc.) AND shares at least one non-trivial token with the next code line.
+
+### Category B — Template / boilerplate phrases
+Comments containing these patterns (case-insensitive):
+- "This function/method/class is responsible for…"
+- "In this code we will…"
+- "The following function…"
+- "The purpose of this function is…"
+- "This component renders…"
+- "Helper function that…" (when the function name already says it)
+- "Used throughout the application"
+
+### Category C — AI meta-phrases
+- "As an AI language model…"
+- "Note: this was generated by AI / Claude / ChatGPT / Copilot"
+- "Generated by Claude / ChatGPT / Copilot"
+- "Generated with the help of ChatGPT"
+- "Note: I cannot…"
+- "I don't have access to…"
+
+### Category D — Debug-labeled comments
+Exact-match only (conservative):
+- `// debug`
+- `// temp` / `// temporary` / `// temporary test`
+- `// TODO remove` (with no further context)
+- `// remove before commit`
+- `// just for testing`
+
+### Category E — Emojis in non-UI contexts
+Remove emojis from:
+- **Any comment** (`// Setup complete ✅` → `// Setup complete`)
+- **`console.*` calls** (`console.log("Done 🎉", x)` → `console.log("Done", x)`)
+- **Thrown `Error` strings** (`throw new Error("Failed 💥")` → `throw new Error("Failed")`)
+- **Logger calls** (`logger.info("Processing 🏁")` → `logger.info("Processing")`)
+
+Unicode ranges: U+1F300–U+1FFFF, U+2600–U+27BF, U+1F100–U+1F1FF, plus variation selectors (U+FE0F) and ZWJ (U+200D).
+
+After removal: collapse double spaces, remove trailing spaces before closing quotes.
+
+---
+
+## What to Preserve (Always)
+
+These are **never touched**, regardless of content:
+
+| Pattern | Examples |
+|---------|---------|
+| `TODO:` / `FIXME:` / `HACK:` / `NOTE:` / `XXX:` / `BUG:` / `WORKAROUND:` | Any maintenance marker |
+| Linter/formatter directives | `eslint-disable`, `@ts-ignore`, `@ts-expect-error`, `prettier-ignore`, `biome-ignore`, `stylelint-disable`, `c8 ignore`, `istanbul ignore` |
+| License headers | Lines containing "copyright", "license", "MIT", "Apache", "GNU" |
+| Business logic explanations | "Fee waived for users with plan > Pro" |
+| Edge cases and workarounds | "Safari 15 bug: reflow needed before measuring" |
+| External constraints | "PaymentProvider requires max 3 retries" |
+| Commented-out code | `// const x = oldValue;` |
+| Emojis inside JSX | `<button>Submit 🚀</button>`, `<p>Done ✅</p>` |
+| Emojis in i18n files | Files in `locales/`, `i18n/` directories |
+
+**When in doubt, keep the comment.** The goal is to remove obvious noise, not to second-guess every line.
+
+---
 
 ## Procedure
 
-### Step 1 — Identify changed files
+### Step 1 — Determine scope
 
+**`--scope=diff` (default):**
 ```bash
 git diff --name-only HEAD
 ```
+If empty, try `git diff origin/main...HEAD --name-only`.
+Filter to `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs`, `.cjs`.
+If no files found, report and stop.
 
-If that returns nothing (all changes are committed to the feature branch), run:
+**`--scope=file`:** Use the current open file or the file specified by the user.
 
-```bash
-git diff origin/main...HEAD --name-only
-```
+**`--scope=all`:** List all JS/TS files in `src/`. Warn the user (this will touch legacy code) and ask to confirm before proceeding.
 
-Filter the result to only `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs`, `.cjs` files.
+Apply `ignoreFiles` globs from config. Skip binary files, `*.min.js`, and files with `@generated` / `// Code generated` markers.
 
-If no changed JS/TS files are found, report this to the user and stop.
+### Step 2 — Determine line scope within each file
 
-### Step 2 — Identify changed lines per file
+For `--scope=diff`: run `git diff HEAD -- <file>` and parse hunk headers to identify the line numbers of added lines (`+` prefix). Only those lines are eligible for cleanup — do not touch lines that existed before the current diff.
 
-For each file, run:
+For `--scope=file` and `--scope=all`: all lines in the file are eligible.
 
-```bash
-git diff HEAD -- <filepath>
-```
+### Step 3 — Read full file for context
 
-Or for committed changes:
+Read the complete file content. Context is needed to:
+- Determine whether a comment mirrors the next non-empty line (Category A).
+- Determine whether a string is inside JSX (preserve emojis).
 
-```bash
-git diff origin/main...HEAD -- <filepath>
-```
+### Step 4 — Apply cleanup rules
 
-Parse the diff output to extract:
-- Which line numbers in the file correspond to added lines (`+` prefix in diff hunks).
-- The hunk headers (`@@ -a,b +c,d @@`) to map diff line numbers to actual file line numbers.
+For each eligible line, check in order:
+1. Is it preserved? (`is_preserved` check: tool directives, maintenance markers, license) → **Skip unconditionally.**
+2. Is it a comment? → Apply Category A, B, C, D, E checks.
+3. Is it a non-comment line with an emoji? → Apply Category E check.
 
-### Step 3 — Read the full file
+For `--scope=diff`: only apply cleanup to lines in the added-lines set from Step 2.
 
-Read the complete content of each changed file. This is necessary to understand context (e.g., whether a comment is followed by a redundant line, or whether a string is inside JSX).
+### Step 5 — Dry-run or write
 
-### Step 4 — Apply cleanup to changed lines only
+**Dry-run:** Output a unified diff of all proposed changes. Print a summary (X comments would be removed, Y emojis would be stripped from Z files). Ask the user to confirm before writing.
 
-For each line number identified in Step 2 as an added line:
-1. Check if that line (and its immediate neighbors for context) contains AI slop patterns.
-2. Apply the cleanup rules from `ai-clean-comments` and `ai-remove-emojis`.
-3. **Do not modify any line that was not in the added-lines set**, even if it contains slop. Those belong to stable code.
-
-### Step 5 — Write changes back
-
-Edit each file with the cleaned content. Only lines in the added-lines set may change.
+**Normal mode:** Edit each file with the cleaned content. Only eligible lines from Step 2 may change.
 
 ### Step 6 — Report
 
-After processing all files, report:
-- Files scanned.
-- Files modified (with count of changes per file).
-- Total comments removed and emojis stripped.
-- Any files skipped (non-JS/TS extension, binary, or unreadable).
+```
+── Cleaned ─────────────────────────────────────────────
+  src/auth/login.ts       removed 3 comments, stripped 2 emojis
+  src/utils/format.ts     removed 1 comment
+
+Total: 4 comments removed, 2 emojis stripped across 2 files.
+Run /ai-clean-confirm before committing.
+```
+
+---
 
 ## Edge Cases
 
-- **Unstaged changes only:** `git diff HEAD` captures both staged and unstaged. If the user wants only staged changes, use `git diff --cached --name-only` instead and ask for confirmation if unclear.
-- **No git repository:** Report an error and suggest using `ai-clean-comments` or `ai-remove-emojis` on the specific file instead.
-- **Merge conflicts:** Do not process files with conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`). Report them as skipped.
-- **Renamed or moved files:** Include them if their content has added lines.
-- **New files (entirely added):** Treat all lines as added — apply full cleanup to the entire file.
-- **Deleted files:** Skip — no content to clean.
-- **Binary files:** Skip automatically.
-- **Very large diffs (>500 changed lines):** Warn the user and ask if they want to proceed file by file.
+- **`--scope=diff`, no git repo:** Fall back to `--scope=file`. Report that git diff was unavailable.
+- **Merge conflict markers** (`<<<<<<<`, `=======`, `>>>>>>>`): Skip the file entirely, report as skipped.
+- **New files (all lines are added):** Treat entire file as eligible — apply full cleanup.
+- **Deleted files:** Skip.
+- **Large scope (`--scope=all` with >200 files):** Process in batches of 20. After each batch, ask if the user wants to continue.
+- **Inline comments** (`counter++; // increment`): Remove only the comment portion, keep the code.
+- **Section dividers** (`// ─────────────────`): Keep if they visually separate named sections. Remove if they're random decoration with no section name.
