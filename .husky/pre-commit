@@ -1,0 +1,23 @@
+#!/usr/bin/env sh
+# ai-slop-cleaner pre-commit hook
+# Runs a lightweight slop scan on staged JS/TS files before each commit.
+# Install: cp .husky/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(js|ts|jsx|tsx|mjs|cjs)$')
+
+if [ -z "$STAGED" ]; then
+  exit 0
+fi
+
+echo "🔍 ai-slop-cleaner: scanning staged files for AI slop patterns..."
+python3 .github/scripts/slop_scan.py $STAGED
+
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "❌ AI slop patterns detected in staged files."
+  echo "   Run /ai-clean-diff in Claude Code to clean them, then re-stage."
+  echo "   To bypass (not recommended): git commit --no-verify"
+  exit 1
+fi
+
+echo "✅ No AI slop patterns detected. Proceeding with commit."
