@@ -2,13 +2,13 @@
 
 > Pack de skills para Claude Code que detectan y limpian artefactos típicos de código generado por IA en proyectos JavaScript/TypeScript, React/Vite, Python, Go y PHP — sin modificar la lógica de negocio.
 
-> ⚠️ **Uso ético:** Esta herramienta no está pensada para engañar en entornos académicos o profesionales donde el uso de IA esté restringido. Su objetivo es mejorar la calidad y legibilidad del código. No falsifica autoría ni evade detectores basados en metadatos, telemetría o historial de commits.
+> ⚠️ **Uso ético:** Esta herramienta no está pensada para engañar en entornos académicos o profesionales donde el uso de IA esté restringido. No falsifica autoría. No evade detectores basados en metadatos, telemetría ni historial de commits — esos datos no los toca.
 
 ---
 
-## El problema
+## Qué hace (y qué no hace)
 
-El uso de copilotos de código (Claude Code, Copilot, ChatGPT, etc.) introduce un tipo de ruido en el repositorio que no existía antes:
+### Lo que detecta y elimina (objetivo, no opinión)
 
 - Emojis como `😂🔥💀` en comentarios, logs y hasta en commits.
 - Comentarios que repiten exactamente lo que hace la línea siguiente (`// increment counter` encima de `counter++`).
@@ -32,7 +32,7 @@ Este repo ofrece un flujo completo para limpiar ese ruido de forma segura, con C
 /ai-run-tests     →   valida que los skills funcionan correctamente
 ```
 
-Cada paso es independiente. Puedes usar solo el que necesitas.
+Cada paso es independiente. El más común en el día a día es `/ai-clean-diff --dry-run` para ver qué cambiaría, y luego `/ai-clean-diff` para aplicarlo.
 
 ---
 
@@ -41,71 +41,61 @@ Cada paso es independiente. Puedes usar solo el que necesitas.
 ### `/ai-slop-scan`
 Analiza los archivos modificados (o el archivo actual) y lista todos los artefactos de IA encontrados, sin editar nada. Muestra conteo por categoría y referencias `archivo:línea` para revisión manual. Soporta JS, TS, JSX, TSX, Python, Go, PHP y archivos Markdown (Categoría G — prose slop).
 
-### `/ai-clean-comments`
-Elimina comentarios redundantes, plantillas genéricas, frases meta de IA y debug-labeled comments. Conserva `TODO`/`FIXME`, directivas de linters y comentarios de lógica de negocio.
-
-Soporta **dry-run**: agrega `--dry-run` o "muéstrame qué cambiaría" para ver el diff sugerido sin editar archivos.
-
-### `/ai-remove-emojis`
-Quita emojis de comentarios, `console.*` y strings no-UI. Preserva emojis dentro de JSX y strings claramente user-facing.
-
-Soporta **dry-run**: agrega `--dry-run` para ver el diff sugerido sin editar archivos.
-
-### `/ai-clean-diff`
-Aplica las reglas de `/ai-clean-comments` + `/ai-remove-emojis` **solo sobre los archivos y líneas modificadas** en el diff de git actual. Protege el código legacy estabilizado.
-
-Soporta **dry-run**: agrega `--dry-run` para ver el diff sugerido sin editar archivos.
-
-### `/ai-clean-prose`
-Elimina patrones de escritura de IA en archivos Markdown: frases de relleno, adverbios de énfasis, voz pasiva, estructuras binarias formulaicas y adjetivos vacíos (*"seamless"*, *"robust"*, *"powerful"*). No toca bloques de código fenced ni URLs. Al final da un **Prose Quality Score** de 1–10 en 5 dimensiones (Directness, Rhythm, Trust, Authenticity, Density).
-
-Soporta **dry-run**: agrega `--dry-run` para ver el diff sugerido sin editar archivos.
-
-### `/ai-slop-review`
-Revisa el diff post-limpieza y alerta si se eliminó algún comentario que podría haber sido útil (lógica de negocio, edge cases). Es el paso de validación final antes de commitear.
-
-### `/ai-slop-metrics`
-Muestra cuánto ruido se ha limpiado a lo largo del tiempo: total por categoría, historial por commit y branch, y el tipo de slop más frecuente en el proyecto. Lee de `.ai-slop-metrics.json` (generado automáticamente en cada cleanup run).
-
-### `/ai-run-tests`
-Ejecuta la suite de regresión definida en `tests/cases/` contra los fixtures de `tests/fixtures/`. Reporta PASS/FAIL por caso sin modificar ningún archivo.
+Los skills `/ai-clean-comments` y `/ai-remove-emojis` fueron consolidados en `/ai-clean-diff` para evitar duplicación de reglas.
 
 ---
 
-## Qué conservan los skills (siempre)
+## Scanner estático (CI)
 
-| Patrón | Ejemplo |
-|--------|---------|
-| `TODO` / `FIXME` / `HACK` / `NOTE` | `// TODO: add pagination` |
-| Directivas de linters | `eslint-disable`, `@ts-ignore`, `prettier-ignore` |
-| Lógica de negocio | `// Fee waived for users with plan > Pro` |
-| Edge cases y workarounds | `// Safari bug: reflow needed before measuring` |
-| Emojis en UI/JSX | `<button>Submit 🚀</button>` |
-| Código comentado | `// const x = oldValue;` |
-| Cabeceras de licencia | `// Copyright (c) 2024 …` |
-| Bloques de código en Markdown | ` ``` fenced blocks ``` ` |
+El scanner de Python en `.github/scripts/slop_scan.py` implementa las categorías A–E:
+
+```bash
+# Scan files changed in git diff
+python3 .github/scripts/slop_scan.py --diff
+
+# Scan specific files
+python3 .github/scripts/slop_scan.py src/auth/login.ts src/utils/format.ts
+
+# Apply cleanup to a single file (output to stdout)
+python3 .github/scripts/slop_scan.py src/auth/login.ts --apply
+
+# JSON output (for CI integration)
+python3 .github/scripts/slop_scan.py --diff --json
+```
+
+El workflow en `.github/workflows/slop-scan.yml` corre el scanner en cada PR sobre los archivos JS/TS modificados. Es informacional por defecto — no bloquea el merge. Para convertirlo en gate duro, cambiar `continue-on-error: true` a `false`.
+
+### Tests
+
+```bash
+bash tests/run.sh
+```
+
+Diff-based: aplica el scanner sobre cada `tests/fixtures/*.input.ts` y compara con `*.expected.ts`. 2 fixtures ahora, fácil de extender.
 
 ---
 
 ## Instalación
 
-1. Asegúrate de tener [Claude Code](https://claude.ai/code) instalado.
-2. Clona este repositorio:
+1. Clona este repositorio:
    ```bash
    git clone https://github.com/NicoENDYs/ai-slop-cleaner.git
    cd ai-slop-cleaner
    ```
-3. Copia los skills a tu proyecto o a nivel de usuario:
+
+2. Copia los skills a tu proyecto:
    ```bash
-   # Solo para este proyecto
    mkdir -p .claude/skills
    cp -r skills/* .claude/skills/
+   ```
 
-   # Para todos tus proyectos
+   O a nivel de usuario (disponibles en todos tus proyectos):
+   ```bash
    mkdir -p ~/.claude/skills
    cp -r skills/* ~/.claude/skills/
    ```
-4. Reinicia Claude Code.
+
+3. Reinicia Claude Code.
 
 ### Pre-commit hook (opcional pero recomendado)
 
@@ -132,7 +122,7 @@ El scanner Python es agnóstico al proveedor — no requiere Claude Code y corre
 
 ### Configuración por proyecto (opcional)
 
-Copia `config/default.json` a la raíz de tu proyecto como `.ai-slop-cleaner.json` y ajusta las reglas:
+Copia `config/default.json` a la raíz de tu proyecto como `.ai-slop-cleaner.json`:
 
 ```bash
 cp config/default.json .ai-slop-cleaner.json
@@ -219,7 +209,7 @@ Corre la suite de regresión completa. Ver `tests/README.md` para agregar nuevos
 ```typescript
 // This function is responsible for incrementing the counter by one
 function increment() {
-  // increment counter by 1
+  // increment counter
   counter++;
   // return the result
   return counter;
@@ -234,20 +224,19 @@ function increment() {
 }
 ```
 
-### Emojis y debug leftovers
+### Emojis en logs
 
 **Antes:**
 ```typescript
 // 🚀 Auth module setup
-console.log("User fetched 🔥", user);
-// Temporary debug 😂
-console.warn("⚠️ Missing field");
+console.log("User authenticated 🎉", user);
+console.warn("Missing field ⚠️");
 ```
 
 **Después:**
 ```typescript
 // Auth module setup
-console.log("User fetched", user);
+console.log("User authenticated", user);
 console.warn("Missing field");
 ```
 
@@ -270,13 +259,13 @@ It's a semantic filter.
 ### Qué se conserva
 
 ```typescript
-// TODO: add pagination when user list grows large       ← conservado
+// TODO: add pagination when list grows large     ← conservado
 // eslint-disable-next-line @typescript-eslint/no-explicit-any  ← conservado
-// Fee waived for users with plan > Pro — business rule  ← conservado
-<button>Submit 🚀</button>                               ← emoji conservado (JSX UI)
+// Fee waived for users with plan > Pro           ← conservado (regla de negocio)
+<button>Submit 🚀</button>                        ← emoji conservado (JSX)
 ```
 
-Ver más ejemplos en [`examples/`](./examples/).
+Ver más en [`examples/`](./examples/) y [`tests/fixtures/`](./tests/fixtures/).
 
 ---
 
@@ -296,18 +285,18 @@ Ver más ejemplos en [`examples/`](./examples/).
 
 ## Qué NO hace
 
-- No garantiza evadir detectores de IA basados en metadatos, telemetría o historial de commits.
-- No modifica la lógica del código, solo comentarios y strings decorativos.
-- No genera código desde cero; se usa *después* de una sesión con copiloto.
-- No está pensada para incumplir políticas de uso de IA en entornos académicos o profesionales.
+- Si la solución real es revisar más antes de commitear. El cleaner no reemplaza el juicio sobre qué código merece estar en el repo.
+- Si tu equipo no tiene el problema de slop — algunos estilos de trabajo con IA ya producen código limpio. No agrega valor si no hay señal.
+- Si tu proyecto ya tiene un linter configurado que cubre el 80% de esto. Evitar redundancia.
+- Si necesitas que el resultado "pase como humano" ante algún evaluador. Esta herramienta no funciona para eso ni está pensada para eso.
 
 ---
 
 ## Roadmap
 
 - [x] Skills de limpieza de comentarios y emojis
-- [x] Modo diff (limpieza solo sobre cambios recientes)
 - [x] Skill de scan (detectar sin modificar)
+- [x] Modo diff (limpieza solo sobre cambios recientes)
 - [x] Dry-run (ver diff antes de editar)
 - [x] Configuración por proyecto
 - [x] Soporte para Python, Go, PHP

@@ -86,5 +86,10 @@
     "*.min.js",
     "*.generated.ts",
     "*.d.ts"
-  ]
+  ],
+
+  "metrics": {
+    "enabled": false,
+    "_comment": "Set enabled: true to write cleanup history to .ai-slop-metrics.json. Not yet implemented."
+  }
 }
